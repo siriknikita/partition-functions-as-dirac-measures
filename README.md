@@ -41,6 +41,8 @@ Charts saved under `output/n12/`:
 - `chart_aggregate_measure.png`
 - `chart_haar_first_difference.png`
 - `chart_heatmap_log_scaled.png`
+- `chart_surface_3d.png`
+- `chart_aggregate_ridge_3d.png`
 
 To use a custom JSON path instead of `--n`:
 

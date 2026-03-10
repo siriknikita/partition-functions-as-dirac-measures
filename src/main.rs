@@ -7,6 +7,8 @@ use std::io::{BufWriter, Write};
 struct PartitionRecord {
     partition: Vec<usize>,
     measure: Vec<usize>,
+    largest_part: usize,
+    num_parts: usize,
 }
 
 fn generate_partitions(n: usize) -> Vec<Vec<usize>> {
@@ -43,10 +45,27 @@ fn partition_to_measure(partition: &[usize], n: usize) -> Vec<usize> {
     measure
 }
 
-fn to_json_string(n: usize, records: &[PartitionRecord], aggregate: &[usize]) -> String {
+fn first_difference(v: &[usize]) -> Vec<isize> {
+    let mut out = Vec::with_capacity(v.len());
+    let mut prev = 0isize;
+    for &x in v {
+        let xi = x as isize;
+        out.push(xi - prev);
+        prev = xi;
+    }
+    out
+}
+
+fn to_json_string(
+    n: usize,
+    records: &[PartitionRecord],
+    aggregate: &[usize],
+    aggregate_diff: &[isize],
+) -> String {
     let mut s = String::new();
     s.push_str("{\n");
     s.push_str(&format!("  \"n\": {},\n", n));
+    s.push_str(&format!("  \"count\": {},\n", records.len()));
 
     s.push_str("  \"partitions\": [\n");
     for (i, record) in records.iter().enumerate() {
@@ -68,7 +87,10 @@ fn to_json_string(n: usize, records: &[PartitionRecord], aggregate: &[usize]) ->
             }
             s.push_str(&value.to_string());
         }
-        s.push_str("]\n");
+        s.push_str("],\n");
+
+        s.push_str(&format!("      \"largest_part\": {},\n", record.largest_part));
+        s.push_str(&format!("      \"num_parts\": {}\n", record.num_parts));
 
         s.push_str("    }");
         if i + 1 < records.len() {
@@ -80,6 +102,15 @@ fn to_json_string(n: usize, records: &[PartitionRecord], aggregate: &[usize]) ->
 
     s.push_str("  \"aggregate_measure\": [");
     for (i, value) in aggregate.iter().enumerate() {
+        if i > 0 {
+            s.push_str(", ");
+        }
+        s.push_str(&value.to_string());
+    }
+    s.push_str("],\n");
+
+    s.push_str("  \"aggregate_first_difference\": [");
+    for (i, value) in aggregate_diff.iter().enumerate() {
         if i > 0 {
             s.push_str(", ");
         }
@@ -109,10 +140,26 @@ fn main() -> std::io::Result<()> {
             aggregate[i] += measure[i];
         }
 
-        records.push(PartitionRecord { partition, measure });
+        let largest_part = *partition.iter().max().unwrap_or(&0);
+        let num_parts = partition.len();
+
+        records.push(PartitionRecord {
+            partition,
+            measure,
+            largest_part,
+            num_parts,
+        });
     }
 
-    let json = to_json_string(n, &records, &aggregate);
+    records.sort_by(|a, b| {
+        b.largest_part
+            .cmp(&a.largest_part)
+            .then(a.num_parts.cmp(&b.num_parts))
+            .then(a.partition.cmp(&b.partition))
+    });
+
+    let aggregate_diff = first_difference(&aggregate);
+    let json = to_json_string(n, &records, &aggregate, &aggregate_diff);
 
     let out_dir = format!("output/n{n}");
     fs::create_dir_all(&out_dir)?;

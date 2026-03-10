@@ -10,29 +10,36 @@ from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
 
-def load_data(json_path: Path) -> tuple[int, list, np.ndarray]:
+def load_data(json_path: Path) -> tuple[int, list, np.ndarray, np.ndarray]:
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     n = data["n"]
     records = data["partitions"]
     aggregate = np.array(data["aggregate_measure"], dtype=float)
-    return n, records, aggregate
+    if "aggregate_first_difference" in data:
+        aggregate_first_difference = np.array(
+            data["aggregate_first_difference"], dtype=float
+        )
+    else:
+        aggregate_first_difference = np.diff(aggregate, prepend=0)
+    return n, records, aggregate, aggregate_first_difference
 
 
 def run_visualization(json_path: Path, out_dir: Path, show: bool) -> None:
-    n, records, aggregate = load_data(json_path)
+    n, records, aggregate, aggregate_first_difference = load_data(json_path)
     measure_matrix = np.array([r["measure"] for r in records], dtype=float)
     x = np.arange(1, n + 1)
 
-    example_index = min(10, len(records) - 1)
+    example_index = min(12, len(records) - 1)
     example_partition = records[example_index]["partition"]
     example_measure = np.array(records[example_index]["measure"], dtype=float)
 
     def save_figure(filename: str) -> None:
         out_path = out_dir / filename
-        plt.savefig(out_path)
+        plt.savefig(out_path, dpi=180)
         if show:
             plt.show()
         plt.close()
@@ -68,9 +75,8 @@ def run_visualization(json_path: Path, out_dir: Path, show: bool) -> None:
     save_figure("chart_aggregate_measure.png")
 
     # 4. Haar-like first difference
-    haar_like = np.diff(aggregate, prepend=0)
     plt.figure(figsize=(10, 5))
-    plt.stem(x, haar_like)
+    plt.stem(x, aggregate_first_difference)
     plt.xlabel("Part size k")
     plt.ylabel("First difference")
     plt.title(f"Haar-like first-difference of aggregate measure for n = {n}")
@@ -87,6 +93,41 @@ def run_visualization(json_path: Path, out_dir: Path, show: bool) -> None:
     plt.title(f"log-scaled stacked measures for n = {n}")
     plt.tight_layout()
     save_figure("chart_heatmap_log_scaled.png")
+
+    # 6. 3D surface of stacked partition measures
+    X = np.arange(1, n + 1)
+    Y = np.arange(1, measure_matrix.shape[0] + 1)
+    XX, YY = np.meshgrid(X, Y)
+    fig = plt.figure(figsize=(12, 8))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.plot_surface(
+        XX, YY, np.log1p(measure_matrix),
+        rstride=1, cstride=1, linewidth=0, antialiased=True,
+    )
+    ax.set_xlabel("Part size k")
+    ax.set_ylabel("Partition index")
+    ax.set_zlabel("log(1+multiplicity)")
+    ax.set_title(f"3D surface of stacked partition measures for n={n}")
+    fig.tight_layout()
+    save_figure("chart_surface_3d.png")
+
+    # 7. 3D ridge surface of aggregate measure
+    X = np.arange(1, n + 1)
+    Y_ridge = np.arange(0, 2)
+    XX_ridge, YY_ridge = np.meshgrid(X, Y_ridge)
+    ZZ = np.vstack([aggregate, aggregate])
+    fig = plt.figure(figsize=(12, 7))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.plot_surface(
+        XX_ridge, YY_ridge, ZZ,
+        rstride=1, cstride=1, linewidth=0, antialiased=True,
+    )
+    ax.set_xlabel("Part size k")
+    ax.set_ylabel("Thickness axis")
+    ax.set_zlabel("Total multiplicity")
+    ax.set_title(f"3D ridge surface of the aggregate measure for n={n}")
+    fig.tight_layout()
+    save_figure("chart_aggregate_ridge_3d.png")
 
 
 def main() -> int:

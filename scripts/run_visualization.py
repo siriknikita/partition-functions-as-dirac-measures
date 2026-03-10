@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""
+Visualization script for partition measures.
+Reads JSON produced by the Rust binary and saves charts to the same directory.
+"""
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def load_data(json_path: Path) -> tuple[int, list, np.ndarray]:
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    n = data["n"]
+    records = data["partitions"]
+    aggregate = np.array(data["aggregate_measure"], dtype=float)
+    return n, records, aggregate
+
+
+def run_visualization(json_path: Path, out_dir: Path, show: bool) -> None:
+    n, records, aggregate = load_data(json_path)
+    measure_matrix = np.array([r["measure"] for r in records], dtype=float)
+    x = np.arange(1, n + 1)
+
+    example_index = min(10, len(records) - 1)
+    example_partition = records[example_index]["partition"]
+    example_measure = np.array(records[example_index]["measure"], dtype=float)
+
+    def save_figure(filename: str) -> None:
+        out_path = out_dir / filename
+        plt.savefig(out_path)
+        if show:
+            plt.show()
+        plt.close()
+        print(f"Saved {out_path}")
+
+    # 1. Individual measure
+    plt.figure(figsize=(10, 5))
+    plt.stem(x, example_measure)
+    plt.xlabel("Part size k")
+    plt.ylabel("Multiplicity m_k")
+    plt.title(f"Measure of one partition: {example_partition}")
+    plt.tight_layout()
+    save_figure("chart_individual_measure.png")
+
+    # 2. Heatmap of all partitions
+    plt.figure(figsize=(10, 8))
+    plt.imshow(measure_matrix, aspect="auto", origin="lower")
+    plt.colorbar(label="Multiplicity")
+    plt.xlabel("Part size k")
+    plt.ylabel("Partition index")
+    plt.xticks(ticks=np.arange(n), labels=np.arange(1, n + 1))
+    plt.title(f"Stacked partition measures for n = {n}")
+    plt.tight_layout()
+    save_figure("chart_heatmap_partitions.png")
+
+    # 3. Aggregate measure
+    plt.figure(figsize=(10, 5))
+    plt.bar(x, aggregate)
+    plt.xlabel("Part size k")
+    plt.ylabel("Total multiplicity across all partitions")
+    plt.title(f"Aggregate measure M_n for n = {n}")
+    plt.tight_layout()
+    save_figure("chart_aggregate_measure.png")
+
+    # 4. Haar-like first difference
+    haar_like = np.diff(aggregate, prepend=0)
+    plt.figure(figsize=(10, 5))
+    plt.stem(x, haar_like)
+    plt.xlabel("Part size k")
+    plt.ylabel("First difference")
+    plt.title(f"Haar-like first-difference of aggregate measure for n = {n}")
+    plt.tight_layout()
+    save_figure("chart_haar_first_difference.png")
+
+    # 5. Log-scaled heatmap
+    plt.figure(figsize=(10, 8))
+    plt.imshow(np.log1p(measure_matrix), aspect="auto", origin="lower")
+    plt.colorbar(label="log(1 + multiplicity)")
+    plt.xlabel("Part size k")
+    plt.ylabel("Partition index")
+    plt.xticks(ticks=np.arange(n), labels=np.arange(1, n + 1))
+    plt.title(f"log-scaled stacked measures for n = {n}")
+    plt.tight_layout()
+    save_figure("chart_heatmap_log_scaled.png")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Generate partition measure charts from JSON produced by the Rust binary."
+    )
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--n",
+        type=int,
+        metavar="N",
+        help="Partition number; reads output/n{N}/partitions_measures.json",
+    )
+    group.add_argument(
+        "--input",
+        type=Path,
+        metavar="PATH",
+        help="Path to partitions_measures.json; charts saved in the same directory",
+    )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Also display plots interactively",
+    )
+    args = parser.parse_args()
+
+    if args.n is not None:
+        json_path = Path(f"output/n{args.n}/partitions_measures.json")
+        if not json_path.exists():
+            print(f"Error: {json_path} not found. Run: cargo run -- {args.n}", file=sys.stderr)
+            return 1
+        out_dir = json_path.parent
+    else:
+        json_path = args.input
+        if not json_path.is_file():
+            print(f"Error: not a file: {json_path}", file=sys.stderr)
+            return 1
+        out_dir = json_path.parent
+
+    run_visualization(json_path, out_dir, args.show)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

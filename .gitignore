@@ -1,0 +1,6 @@
+/target
+/output
+/.venv
+*.pyc
+__pycache__/
+partitions_measures.json

@@ -4,3 +4,4 @@
 *.pyc
 __pycache__/
 partitions_measures.json
+.DS_Store
